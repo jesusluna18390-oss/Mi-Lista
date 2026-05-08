@@ -1470,7 +1470,25 @@ document.getElementById('new-cat-inp').addEventListener('keydown',function(e){if
 
 // ─── PWA SERVICE WORKER ────────────────────────────────────────────────────────
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('sw.js').catch(function(){});
+  navigator.serviceWorker.register('sw.js').then(function(reg){
+    // Forzar actualización inmediata
+    reg.update();
+    if(reg.waiting) reg.waiting.postMessage({type:'SKIP_WAITING'});
+    reg.addEventListener('updatefound', function(){
+      var newSW = reg.installing;
+      newSW.addEventListener('statechange', function(){
+        if(newSW.state === 'installed' && navigator.serviceWorker.controller){
+          newSW.postMessage({type:'SKIP_WAITING'});
+          window.location.reload();
+        }
+      });
+    });
+  }).catch(function(){});
+
+  // Si hay un nuevo SW esperando, activarlo y recargar
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    window.location.reload();
+  });
 }
 </script>
 </body>
