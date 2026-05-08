@@ -1,4 +1,4 @@
-const CACHE = 'mi-lista-v1';
+const CACHE = 'mi-lista-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -23,8 +23,20 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// Network first — siempre intenta bajar la versión más nueva
 self.addEventListener('fetch', e => {
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request).catch(() => cached))
+    fetch(e.request)
+      .then(res => {
+        var clone = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
+});
+
+// Activación inmediata cuando llega mensaje SKIP_WAITING
+self.addEventListener('message', e => {
+  if(e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
