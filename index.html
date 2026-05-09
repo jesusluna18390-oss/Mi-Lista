@@ -963,16 +963,9 @@ function doShare(method){
   if(cats.length===0){showToast('⚠️ No hay productos para compartir');return;}
   var text=buildText();
   if(method==='wa'){
-    // Show WA choice dialog
-    document.getElementById('wa-choice-ov').style.display='flex';
-    closeShare();
-  } else if(method==='wa-normal'){
     var url='https://wa.me/?text='+encodeURIComponent(text);
     window.open(url,'_blank');
-    document.getElementById('wa-choice-ov').style.display='none';
-  } else if(method==='wa-biz'){
-    window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
-    document.getElementById('wa-choice-ov').style.display='none';
+    closeShare();
   } else if(method==='email'){
     var subject=encodeURIComponent('🛒 MI LISTA');
     var body=encodeURIComponent(text);
@@ -1076,12 +1069,65 @@ function confirmPrint(){
     +'</body></html>';
 
   closePDFPreview();
-  var win=window.open('','_blank','width=800,height=600');
-  if(!win){showToast('⚠️ Permitir ventanas emergentes');return;}
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(function(){win.print();},600);
+
+  // Generate PDF with jsPDF and show download button in a modal
+  function generateAndDownload(){
+    var doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+    var W=210,margin=18,x=margin,y=20,colW=W-margin*2;
+    doc.setFont('helvetica','bold');doc.setFontSize(18);doc.setTextColor(17,17,17);
+    doc.text('MI LISTA'+listLabel,x,y);y+=6;
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(80,80,80);
+    doc.text(fecha,x,y);y+=5;
+    doc.setDrawColor(17,17,17);doc.setLineWidth(0.5);doc.line(x,y,W-margin,y);y+=6;
+    cats.forEach(function(cat){
+      if(y>270){doc.addPage();y=20;}
+      doc.setFillColor(232,232,232);doc.rect(x,y,colW,7,'F');
+      doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(17,17,17);
+      doc.text(cat.name.toUpperCase(),x+3,y+5);y+=9;
+      cat.products.forEach(function(p){
+        if(y>276){doc.addPage();y=20;}
+        var bought=p.bought;var label=p.name;var qty='x'+p.qty;
+        var c=bought?136:17;
+        doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(c,c,c);
+        doc.text(label,x+5,y+4.5,{maxWidth:colW-22});
+        doc.setFont('helvetica','bold');doc.text(qty,W-margin-2,y+4.5,{align:'right'});
+        if(bought){var tw=Math.min(doc.getTextWidth(label),colW-22);doc.setDrawColor(136,136,136);doc.setLineWidth(0.3);doc.line(x+5,y+3,x+5+tw,y+3);}
+        doc.setDrawColor(204,204,204);doc.setLineWidth(0.2);doc.line(x,y+7,W-margin,y+7);y+=8;
+      });y+=4;
+    });
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(150,150,150);
+    doc.text('MI LISTA App',W/2,y+6,{align:'center'});
+
+    // Show inline download modal
+    var blob=doc.output('blob');
+    var blobUrl=URL.createObjectURL(blob);
+    var modal=document.createElement('div');
+    modal.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:16px';
+    var iframe=document.createElement('iframe');
+    iframe.src=blobUrl;
+    iframe.style.cssText='width:100%;flex:1;border:none;border-radius:12px;background:#fff;max-height:70vh';
+    var btnRow=document.createElement('div');
+    btnRow.style.cssText='display:flex;gap:12px;width:100%;max-width:400px';
+    var dlBtn=document.createElement('a');
+    dlBtn.href=blobUrl;
+    dlBtn.download='MI LISTA'+(currentListName?' - '+currentListName:'')+'.pdf';
+    dlBtn.textContent='⬇️ Descargar PDF';
+    dlBtn.style.cssText='flex:1;background:#2ecc71;color:#fff;font-weight:800;font-size:1rem;padding:14px;border-radius:12px;text-align:center;text-decoration:none;font-family:Nunito,sans-serif';
+    var closeBtn=document.createElement('button');
+    closeBtn.textContent='✕ Cerrar';
+    closeBtn.style.cssText='flex:1;background:#e74c3c;color:#fff;font-weight:800;font-size:1rem;padding:14px;border-radius:12px;border:none;cursor:pointer;font-family:Nunito,sans-serif';
+    closeBtn.onclick=function(){document.body.removeChild(modal);URL.revokeObjectURL(blobUrl);};
+    btnRow.appendChild(dlBtn);btnRow.appendChild(closeBtn);
+    modal.appendChild(iframe);modal.appendChild(btnRow);
+    document.body.appendChild(modal);
+  }
+
+  if(window.jspdf){generateAndDownload();return;}
+  var script=document.createElement('script');
+  script.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  script.onload=function(){generateAndDownload();};
+  script.onerror=function(){showToast('⚠️ Sin conexión para generar PDF');};
+  document.head.appendChild(script);
 }
 
 function _generatePDF(cats,fecha,listLabel){
@@ -1351,7 +1397,6 @@ function render(){
       +'<span class="cat-name">'+esc(cat.name)+'</span>'
       +(badgeTxt?'<span class="badge">'+badgeTxt+'</span>':'')
       +'<button class="icon-btn '+(cat.sorted?'active-sort':'')+'" onclick="toggleSort(\''+cat.id+'\')" title="A-Z">'+(cat.sorted?'🔤':'↕️')+'</button>'
-      +'<button class="icon-btn '+(cat.showEmojis?'active-emoji':'')+'" onclick="toggleEmojis(\''+cat.id+'\')" title="Emojis">'+(cat.showEmojis?'😊':'🙈')+'</button>'
       +'<button class="icon-btn" onclick="startRename(\''+cat.id+'\')" title="Renombrar">✏️</button>'
       +'<button class="icon-btn del" onclick="deleteCategory(\''+cat.id+'\')" title="Eliminar">🗑️</button>'
       +'</div>'
